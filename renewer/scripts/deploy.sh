@@ -20,6 +20,16 @@ LOG_FILE="${LOG_FILE:-"$LOG_DIR/deploy-$(date +%Y%m%d-%H%M%S).log"}"
 . /scripts/logging.sh
 
 # =============================================================================
+# Azure Authentication
+# =============================================================================
+log_info "Authenticating with Azure using managed identity..."
+if ! az login --identity > /dev/null 2>&1; then
+    log_error "Failed to authenticate with Azure managed identity"
+    exit 1
+fi
+log_info "Successfully authenticated with Azure"
+
+# =============================================================================
 # Validation
 # =============================================================================
 # Check if domain is provided
@@ -32,16 +42,6 @@ fi
 if [ ! -f "$CERT_PATH" ] || [ ! -f "$KEY_PATH" ]; then
     log_error "Certificate files not found for domain: $DOMAIN"
     log_error "  Expected: $CERT_PATH and $KEY_PATH"
-    exit 1
-fi
-
-# =============================================================================
-# Azure Authentication
-# =============================================================================
-log_info "Authenticating with Azure using Managed Identity..."
-# Login using managed identity (works automatically in Azure Container Apps)
-if ! run_cmd "AZ" az login --identity; then
-    log_error "Failed to authenticate with Azure"
     exit 1
 fi
 
@@ -59,19 +59,30 @@ fi
 log_info "PFX file created successfully: $PFX_PATH"
 
 # =============================================================================
-# Key Vault Upload (commented out)
+# Key Vault Upload
 # =============================================================================
-#log_info "Importing certificate into Azure Key Vault: $KEYVAULT_NAME..."
-#if ! run_cmd "AZ" az keyvault certificate import \
-#  --vault-name "$KEYVAULT_NAME" \
-#  --name "${DOMAIN//\./-}-cert" \
-#  --file "$PFX_PATH" \
-#  --password "$PFX_PASS"; then
-#    log_error "Failed to upload certificate to Key Vault"
-#    exit 1
-#fi
-
-# Clean up temporary PFX file
-#rm -f "$PFX_PATH"
+if [ -n "$KEYVAULT_NAME" ]; then
+    # Replace dots with hyphens for certificate name (Azure KV naming requirements)
+    CERT_NAME=$(echo "$DOMAIN" | tr '.' '-')
+    
+    log_info "Importing certificate into Azure Key Vault: $KEYVAULT_NAME..."
+    if ! run_cmd "AZ" az keyvault certificate import \
+      --vault-name "$KEYVAULT_NAME" \
+      --name "$CERT_NAME" \
+      --file "$PFX_PATH" \
+      --password "$PFX_PASS"; then
+        log_error "Failed to upload certificate to Key Vault"
+        exit 1
+    fi
+    
+    log_info "Certificate successfully uploaded to Key Vault as: $CERT_NAME"
+    
+    # Clean up temporary files after successful upload
+    log_info "Cleaning up temporary files..."
+    rm -f "$DOMAIN_DIR/$DOMAIN.pem"
+    log_info "Temporary files cleaned up"
+else
+    log_warn "KEYVAULT_NAME not set, skipping Key Vault upload"
+fi
 
 log_info "Certificate processing completed successfully for domain: $DOMAIN"
