@@ -89,28 +89,28 @@ done
 
 # Issue certificates for current domains
 for DOMAIN in $DOMAINS_LIST; do
-  log_info "Issuing certificate for: $DOMAIN"
+    log_info "Issuing certificate for: $DOMAIN"
 
-  if run_acme_cmd --issue -d "$DOMAIN" --webroot "$WEBROOT_PATH"; then
-    log_info "Certificate issued successfully for: $DOMAIN"
+    if run_acme_cmd --issue --ecc -d "$DOMAIN" --webroot "$WEBROOT_PATH"; then
+        log_info "Certificate issued successfully for: $DOMAIN"
     
-    log_info "Installing certificate for: $DOMAIN"
+        log_info "Installing certificate for: $DOMAIN"
     
-    # Create target directory if it doesn't exist
-    mkdir -p "/acme.sh/$DOMAIN"
+        # Create target directory if it doesn't exist
+        mkdir -p "/acme.sh/$DOMAIN"
     
-    if run_acme_cmd --install-cert -d "$DOMAIN" \
-        --cert-file      /acme.sh/$DOMAIN/cert.pem \
-        --key-file       /acme.sh/$DOMAIN/key.pem \
-        --fullchain-file /acme.sh/$DOMAIN/fullchain.pem \
-        --reloadcmd     "/scripts/deploy.sh $DOMAIN"; then
-      log_info "Certificate installed and deploy hook executed for: $DOMAIN"
+        if run_acme_cmd --install-cert --ecc -d "$DOMAIN" \
+                --cert-file      /acme.sh/$DOMAIN/cert.pem \
+                --key-file       /acme.sh/$DOMAIN/key.pem \
+                --fullchain-file /acme.sh/$DOMAIN/fullchain.pem \
+                --reloadcmd     "/scripts/deploy.sh $DOMAIN"; then
+            log_info "Certificate installed and deploy hook executed for: $DOMAIN"
+        else
+            log_error "Failed to install certificate for: $DOMAIN"
+        fi
     else
-      log_error "Failed to install certificate for: $DOMAIN"
+        log_warn "Certificate issuance skipped or failed for: $DOMAIN"
     fi
-  else
-    log_warn "Certificate issuance skipped or failed for: $DOMAIN"
-  fi
 done
 
 # =============================================================================
