@@ -59,3 +59,5 @@ Temporary Items
 logs
 acme
 webroot
+
+terraform-example.tf

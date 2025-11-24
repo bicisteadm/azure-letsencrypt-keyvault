@@ -8,60 +8,32 @@ set -e
 # =============================================================================
 # Configuration
 # =============================================================================
-DOMAINS=${DOMAINS}
+DOMAINS=${DOMAINS:-""}
 WEBROOT_PATH=${WEBROOT_PATH:-"/webroot"}
-ACME_EMAIL=${ACME_EMAIL}
+ACME_EMAIL=${ACME_EMAIL:-""}
 ACME_ENV=${ACME_ENV:-"prod"}
 LOG_DIR=${LOG_DIR:-"/logs"}
 LOG_TO_FILE=${LOG_TO_FILE:-"false"}
 LOG_FILE="$LOG_DIR/acme-$(date +%Y%m%d-%H%M%S).log"
 
+# Convert comma-separated domains to space-separated for easier iteration
+DOMAINS_LIST=$(echo "$DOMAINS" | tr ',' ' ')
+
+# Load shared logging functions
+. /scripts/logging.sh
+
 # =============================================================================
-# Functions
+# Validation
 # =============================================================================
-log_info() {
-    local timestamp=$(date '+%Y-%m-%d %H:%M:%S')
-    local message="[$timestamp] [INFO] $1"
-    echo "$message"
-    if [ "$LOG_TO_FILE" = "true" ]; then
-        echo "$message" >> "$LOG_FILE"
-    fi
-}
+if [ -z "$DOMAINS" ]; then
+    log_error "DOMAINS environment variable is required"
+    exit 1
+fi
 
-log_warn() {
-    local timestamp=$(date '+%Y-%m-%d %H:%M:%S')
-    local message="[$timestamp] [WARN] $1"
-    echo "$message"
-    if [ "$LOG_TO_FILE" = "true" ]; then
-        echo "$message" >> "$LOG_FILE"
-    fi
-}
-
-log_error() {
-    local timestamp=$(date '+%Y-%m-%d %H:%M:%S')
-    local message="[$timestamp] [ERROR] $1"
-    echo "$message" >&2
-    if [ "$LOG_TO_FILE" = "true" ]; then
-        echo "$message" >> "$LOG_FILE"
-    fi
-}
-
-# Function to execute acme.sh commands with logging
-run_acme_cmd() {
-    if [ "$LOG_TO_FILE" = "true" ]; then
-        # Capture both stdout and stderr, display on console and log to file
-        {
-            acme.sh "$@" 2>&1 | while IFS= read -r line; do
-                local timestamp=$(date '+%Y-%m-%d %H:%M:%S')
-                echo "[$timestamp] [ACME] $line"
-                echo "[$timestamp] [ACME] $line" >> "$LOG_FILE"
-            done
-        }
-    else
-        # Just run normally if file logging is disabled
-        acme.sh "$@"
-    fi
-}
+if [ -z "$ACME_EMAIL" ]; then
+    log_error "ACME_EMAIL environment variable is required"
+    exit 1
+fi
 
 # =============================================================================
 # Setup ACME Environment
@@ -108,7 +80,7 @@ for CERT_DIR in /acme.sh/*/; do
         BASE_DOMAIN=$(echo "$CERT_DOMAIN" | sed 's/_ecc$//')
         
         # Check if this domain is still needed
-        echo "$DOMAINS" | grep -q "$BASE_DOMAIN" || {
+        echo "$DOMAINS_LIST" | grep -q "$BASE_DOMAIN" || {
             log_info "Removing unused certificate for: $CERT_DOMAIN"
             run_acme_cmd --remove -d "$BASE_DOMAIN" || log_warn "Failed to remove certificate for $CERT_DOMAIN"
         }
@@ -116,23 +88,28 @@ for CERT_DIR in /acme.sh/*/; do
 done
 
 # Issue certificates for current domains
-for DOMAIN in $DOMAINS; do
-    CONF_PATH="/acme.sh/$DOMAIN/$DOMAIN.conf"
+for DOMAIN in $DOMAINS_LIST; do
+    log_info "Issuing certificate for: $DOMAIN"
 
-    if [ ! -f "$CONF_PATH" ]; then
-        log_info "No certificate found for domain: $DOMAIN"
-        log_info "Issuing new certificate for: $DOMAIN"
-
-        run_acme_cmd --issue -d "$DOMAIN" --webroot "$WEBROOT_PATH"
-
+    if run_acme_cmd --issue --ecc -d "$DOMAIN" --webroot "$WEBROOT_PATH"; then
+        log_info "Certificate issued successfully for: $DOMAIN"
+    
         log_info "Installing certificate for: $DOMAIN"
-        run_acme_cmd --install-cert -d "$DOMAIN" \
-            --cert-file      /acme.sh/$DOMAIN/cert.pem \
-            --key-file       /acme.sh/$DOMAIN/key.pem \
-            --fullchain-file /acme.sh/$DOMAIN/fullchain.pem \
-            #--reloadcmd     "/scripts/deploy.sh $DOMAIN"
+    
+        # Create target directory if it doesn't exist
+        mkdir -p "/acme.sh/$DOMAIN"
+    
+        if run_acme_cmd --install-cert --ecc -d "$DOMAIN" \
+                --cert-file      /acme.sh/$DOMAIN/cert.pem \
+                --key-file       /acme.sh/$DOMAIN/key.pem \
+                --fullchain-file /acme.sh/$DOMAIN/fullchain.pem \
+                --reloadcmd     "/scripts/deploy.sh $DOMAIN"; then
+            log_info "Certificate installed and deploy hook executed for: $DOMAIN"
+        else
+            log_error "Failed to install certificate for: $DOMAIN"
+        fi
     else
-        log_info "Certificate for domain '$DOMAIN' already exists - skipping issuance"
+        log_warn "Certificate issuance skipped or failed for: $DOMAIN"
     fi
 done
 

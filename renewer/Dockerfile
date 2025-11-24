@@ -27,11 +27,15 @@ RUN apk --no-cache add -f \
   linux-headers \
   pipx
 
-# Install Azure CLI globally
-RUN pipx install azure-cli && \
-    pipx ensurepath && \
-    chmod -R 755 /root/.local && \
-    ln -s /root/.local/bin/az /usr/local/bin/az
+# Configure pipx install paths accessible to non-root users
+ENV PIPX_HOME=/opt/pipx
+ENV PIPX_BIN_DIR=/opt/pipx/bin
+
+# Install Azure CLI globally in shared location
+RUN mkdir -p ${PIPX_HOME} ${PIPX_BIN_DIR} && \
+        pipx install azure-cli && \
+        chmod -R 755 /opt/pipx && \
+        ln -sf /opt/pipx/bin/az /usr/local/bin/az
 
 # Set up directories for appuser (don't create .acme.sh - let installer do it)
 RUN mkdir -p /acme.sh /webroot /scripts && \
@@ -58,8 +62,10 @@ RUN ln -sf /home/appuser/.acme.sh/acme.sh /usr/local/bin/acme.sh && \
 COPY scripts/ /scripts/
 COPY entrypoint.sh /entrypoint.sh
 
-RUN chmod +x /entrypoint.sh /scripts/deploy.sh && \
-    chown -R appuser:appgroup /scripts /entrypoint.sh
+# Create logs directory and set permissions
+RUN mkdir -p /logs && \
+    chmod +x /entrypoint.sh /scripts/deploy.sh /scripts/logging.sh && \
+    chown -R appuser:appgroup /scripts /entrypoint.sh /logs
 
 # Environment variables
 ENV LE_CONFIG_HOME=/acme.sh
