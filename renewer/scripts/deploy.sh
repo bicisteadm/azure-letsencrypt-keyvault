@@ -14,6 +14,8 @@ PFX_PATH="$DOMAIN_DIR/$DOMAIN.pfx"
 PFX_PASS="${PFX_PASS}"
 
 # Set log file for deploy script
+LOG_DIR=${LOG_DIR:-"/logs"}
+LOG_TO_FILE=${LOG_TO_FILE:-"false"}
 LOG_FILE="${LOG_FILE:-"$LOG_DIR/deploy-$(date +%Y%m%d-%H%M%S).log"}"
 
 # Load shared logging functions
