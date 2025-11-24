@@ -91,18 +91,26 @@ done
 for DOMAIN in $DOMAINS_LIST; do
   log_info "Issuing certificate for: $DOMAIN"
 
-  run_acme_cmd --issue -d "$DOMAIN" --webroot "$WEBROOT_PATH"
-
-  log_info "Installing certificate for: $DOMAIN"
-
-  # Create domain directory if it doesn't exist
-  mkdir -p "/acme.sh/$DOMAIN"
-
-  run_acme_cmd --install-cert -d "$DOMAIN" \
-      --cert-file      /acme.sh/$DOMAIN/cert.pem \
-      --key-file       /acme.sh/$DOMAIN/key.pem \
-      --fullchain-file /acme.sh/$DOMAIN/fullchain.pem \
-      --reloadcmd     "/scripts/deploy.sh $DOMAIN"
+  if run_acme_cmd --issue -d "$DOMAIN" --webroot "$WEBROOT_PATH"; then
+    log_info "Certificate issued successfully for: $DOMAIN"
+    
+    log_info "Installing certificate for: $DOMAIN"
+    
+    # Create target directory if it doesn't exist
+    mkdir -p "/acme.sh/$DOMAIN"
+    
+    if run_acme_cmd --install-cert -d "$DOMAIN" \
+        --cert-file      /acme.sh/$DOMAIN/cert.pem \
+        --key-file       /acme.sh/$DOMAIN/key.pem \
+        --fullchain-file /acme.sh/$DOMAIN/fullchain.pem \
+        --reloadcmd     "/scripts/deploy.sh $DOMAIN"; then
+      log_info "Certificate installed and deploy hook executed for: $DOMAIN"
+    else
+      log_error "Failed to install certificate for: $DOMAIN"
+    fi
+  else
+    log_warn "Certificate issuance skipped or failed for: $DOMAIN"
+  fi
 done
 
 # =============================================================================
