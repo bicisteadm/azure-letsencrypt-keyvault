@@ -25,7 +25,7 @@ LOG_FILE="${LOG_FILE:-"$LOG_DIR/deploy-$(date +%Y%m%d-%H%M%S).log"}"
 # Azure Authentication
 # =============================================================================
 log_info "Authenticating with Azure using managed identity..."
-if ! az login --identity > /dev/null 2>&1; then
+if ! run_cmd "AZ" az login --identity; then
     log_error "Failed to authenticate with Azure managed identity"
     exit 1
 fi
